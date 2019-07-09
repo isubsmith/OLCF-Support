@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+# Find overlapping nodes from an arbitrary number of LSF jobs
+
+import sys
+import subprocess
+import functools
+
+def compareJobs(jobIDs):
+
+    if all(job.isdigit() for job in jobIDs):
+        print("\njobIDs: " + str(jobIDs))
+
+        jobs_and_nodes = {}
+
+        for job in jobIDs:
+            runline = ["/opt/ibm/csm/bin/csm_allocation_query", "-j", job]
+            csm_query_output = subprocess.run(runline, stdout=subprocess.PIPE)
+            csm_query_output = str(csm_query_output.stdout.decode()).splitlines()
+
+            compute_nodes = []
+            for line in csm_query_output:
+                if line.startswith(" - "):
+                    compute_nodes.append(line[3:])
+            jobs_and_nodes[job] = compute_nodes
+
+        common_compute_nodes = functools.reduce(set.intersection, (set(val) for val in jobs_and_nodes.values()))
+
+        if (common_compute_nodes):
+            print("\nCompute nodes common between jobs:")
+            print("\n".join(common_compute_nodes) + "\n")
+        else:
+            print("\nThese jobs did not share any common compute nodes.\n")
+    else:
+        print("Error: Invalid input. 1 or more primary job IDs required\n  usage: common_nodes primaryjobID1 [primaryjobID2 primaryjobID3 ...]")
+
+if __name__ == "__main__":
+    compareJobs(sys.argv[1:])
