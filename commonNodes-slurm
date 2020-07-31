@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+
+# Find overlapping nodes from an arbitrary number of Slurm jobs
+
+# This is likely full of inefficent ways of doing things and/or nonPythonic ways. 
+# I don't claim to be a python expert though, and this isn't performance-critical.
+
+import sys
+import subprocess
+import functools
+
+def expand(ranges):
+    flat = []
+    for item in ranges:
+        pair = tuple(int(i) for i in item.split('-')) + (None,) 
+        flat.extend(list(range(pair[0], (pair[1] or pair[0])+1))) 
+    flattened_ranges = []
+    for item in flat:
+        flattened_ranges.append('rhea'+str(item))
+          
+    return flattened_ranges 
+
+def find_max(jobs_dict):
+    maxnodes = -1
+    for val in jobs_dict.values():
+        if len(val) > maxnodes:
+            maxnodes = len(val)
+    return maxnodes
+
+def compareJobs(jobIDs):
+
+    if all(job.isdigit() for job in jobIDs):
+        print("\njobIDs: " + str(jobIDs))
+
+        jobs_and_nodes = {}
+
+        for job in jobIDs:
+            runline = ["/usr/bin/sacct", "-n", "-o", "NodeList%1000", "-j", job]
+#            print("Running ", runline)
+            csm_query_output = subprocess.run(runline, stdout=subprocess.PIPE)
+            csm_query_output = str(csm_query_output.stdout.decode()).splitlines()
+
+            main=csm_query_output[0]
+            main = main.strip().replace('rhea[','').replace(']','')
+            node_list = expand(main.split(','))
+#            print("Node list:", node_list)
+#            print(len(node_list), "nodes used")
+		
+            jobs_and_nodes[job] = node_list
+
+
+        common_compute_nodes = functools.reduce(set.intersection, (set(val) for val in jobs_and_nodes.values()))
+
+        maxnodes = find_max(jobs_and_nodes)
+        print("Nodes used max: ", maxnodes)
+
+        if (common_compute_nodes):
+            print("\nCompute nodes common between jobs:", jobIDs)
+            print(", ".join(common_compute_nodes) + "\n")
+            print(len(common_compute_nodes), "nodes in common")
+        else:
+            print("\nThese jobs did not share any common compute nodes.\n")
+    else:
+        print("Error: Invalid input. 1 or more primary job IDs required\n  usage: common_nodes primaryjobID1 [primaryjobID2 primaryjobID3 ...]")
+
+if __name__ == "__main__":
+    compareJobs(sys.argv[1:])

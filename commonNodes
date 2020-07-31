@@ -18,13 +18,45 @@ def compareJobs(jobIDs):
             csm_query_output = subprocess.run(runline, stdout=subprocess.PIPE)
             csm_query_output = str(csm_query_output.stdout.decode()).splitlines()
 
-            compute_nodes = []
+            alloc_ids = []
             for line in csm_query_output:
-                if line.startswith(" - "):
-                    compute_nodes.append(line[3:])
-            jobs_and_nodes[job] = compute_nodes
+                if 'allocation' in line:
+                   alloc_ids.append(line.split()[-1])
+ 
+            alloc = alloc_ids[-1]
+            print("JobID ", job, " allocation ID: ", alloc)
+            runline = ["/opt/ibm/csm/bin/csm_allocation_query_details", "-a", alloc]
+            csm_detail_output = subprocess.run(runline, stdout=subprocess.PIPE)
+            csm_detail_output = str(csm_detail_output.stdout.decode()).splitlines()
+
+            node_list = []
+            node_lines = []
+            flag = 0
+            for index, line in enumerate(csm_detail_output):
+                if line.startswith("num_steps:"):
+                   junk, numsteps = line.split()
+                if 'step_id' in line:
+#                   print("Splitting ", line)
+                   step = line.split()[-1]
+#                   print("Processing line ", step)
+                   if step == numsteps:
+                       flag = 1
+                if flag == 1:
+                       if 'compute_nodes' in line:
+                           node_lines.extend(csm_detail_output[index + 1:])
+
+
+            for line in node_lines[:-1]: # strip out the "..." at the end
+                 node_list.append(line.split()[-1])
+
+             
+
+            print("Compute nodes in last jobstep (step: ", numsteps, "): ", node_list)
+            jobs_and_nodes[job] = node_list
+
 
         common_compute_nodes = functools.reduce(set.intersection, (set(val) for val in jobs_and_nodes.values()))
+        print("Common:", common_compute_nodes)
 
         if (common_compute_nodes):
             print("\nCompute nodes common between jobs:")
